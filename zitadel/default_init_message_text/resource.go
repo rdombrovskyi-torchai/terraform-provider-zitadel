@@ -6,13 +6,14 @@ import (
 	"strings"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
+	providerschema "github.com/hashicorp/terraform-plugin-framework/provider/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	providerschema "github.com/hashicorp/terraform-plugin-framework/provider/schema"
 	"github.com/zitadel/zitadel-go/v3/pkg/client/zitadel/admin"
 	textpb "github.com/zitadel/zitadel-go/v3/pkg/client/zitadel/text"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -37,6 +38,12 @@ type defaultInitMessageTextResource struct {
 	clientInfo *helper.ClientInfo
 }
 
+type defaultInitMessageTextModel struct {
+	OrgID types.String `tfsdk:"org_id"`
+	ID    types.String `tfsdk:"id"`
+	// Add other fields as needed
+}
+
 func (r *defaultInitMessageTextResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_default_init_message_text"
 }
@@ -52,9 +59,24 @@ func (r *defaultInitMessageTextResource) Schema(ctx context.Context, req resourc
 	// Convert provider schema to resource schema
 	resourceAttrs := make(map[string]schema.Attribute)
 	for name, attr := range providerSchema.Attributes {
-		if name != "org_id" { // Skip org_id attribute
-			resourceAttrs[name] = convertProviderAttrToResourceAttr(attr)
+		resourceAttrs[name] = convertProviderAttrToResourceAttr(attr)
+	}
+	// Ensure org_id is required
+	if orgAttr, ok := resourceAttrs["org_id"]; ok {
+		if strAttr, ok := orgAttr.(schema.StringAttribute); ok {
+			strAttr.Required = true
+			strAttr.Optional = false
+			resourceAttrs["org_id"] = strAttr
 		}
+	}
+
+	resourceAttrs["org_id"] = schema.StringAttribute{
+		Required:    true,
+		Description: "The organization ID.",
+	}
+	resourceAttrs["id"] = schema.StringAttribute{
+		Computed:    true,
+		Description: "Unique identifier for this managed resource.",
 	}
 
 	resp.Schema = schema.Schema{
@@ -127,14 +149,33 @@ func (r *defaultInitMessageTextResource) Create(ctx context.Context, req resourc
 		return
 	}
 
-	setID(&plan, language)
-	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
+	attrs := plan.Attributes()
+	attrs["id"] = types.StringValue(language)
+	for _, key := range []string{"id", "org_id", "language", "title", "pre_header", "subject", "greeting", "text", "button_text", "footer_text"} {
+		if _, ok := attrs[key]; !ok {
+			attrs[key] = types.StringNull()
+		}
+	}
+	typeMap := map[string]attr.Type{
+		"id":          types.StringType,
+		"org_id":      types.StringType,
+		"language":    types.StringType,
+		"title":       types.StringType,
+		"pre_header":  types.StringType,
+		"subject":     types.StringType,
+		"greeting":    types.StringType,
+		"text":        types.StringType,
+		"button_text": types.StringType,
+		"footer_text": types.StringType,
+	}
+	planWithID, diags := types.ObjectValue(typeMap, attrs)
+	resp.Diagnostics.Append(diags...)
+	resp.Diagnostics.Append(resp.State.Set(ctx, planWithID)...)
 }
 
 func (r *defaultInitMessageTextResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	var state types.Object
-	diags := req.State.Get(ctx, &state)
-	resp.Diagnostics.Append(diags...)
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -166,8 +207,34 @@ func (r *defaultInitMessageTextResource) Read(ctx context.Context, req resource.
 		return
 	}
 
-	setID(&state, language)
-	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
+	attrs := state.Attributes()
+	attrs["id"] = types.StringValue(language)
+	attrs["language"] = types.StringValue(language)
+	for _, key := range []string{"id", "org_id", "language", "title", "pre_header", "subject", "greeting", "text", "button_text", "footer_text"} {
+		if _, ok := attrs[key]; !ok {
+			attrs[key] = types.StringNull()
+		}
+	}
+	var prevOrgID types.String
+	resp.Diagnostics.Append(req.State.GetAttribute(ctx, path.Root("org_id"), &prevOrgID)...)
+	if !prevOrgID.IsNull() && !prevOrgID.IsUnknown() {
+		attrs["org_id"] = prevOrgID
+	}
+	typeMap := map[string]attr.Type{
+		"id":          types.StringType,
+		"org_id":      types.StringType,
+		"language":    types.StringType,
+		"title":       types.StringType,
+		"pre_header":  types.StringType,
+		"subject":     types.StringType,
+		"greeting":    types.StringType,
+		"text":        types.StringType,
+		"button_text": types.StringType,
+		"footer_text": types.StringType,
+	}
+	stateWithID, diags := types.ObjectValue(typeMap, attrs)
+	resp.Diagnostics.Append(diags...)
+	resp.Diagnostics.Append(resp.State.Set(ctx, stateWithID)...)
 }
 
 func (r *defaultInitMessageTextResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
@@ -217,8 +284,28 @@ func (r *defaultInitMessageTextResource) Update(ctx context.Context, req resourc
 		return
 	}
 
-	setID(&plan, language)
-	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
+	attrs := plan.Attributes()
+	attrs["id"] = types.StringValue(language)
+	for _, key := range []string{"id", "org_id", "language", "title", "pre_header", "subject", "greeting", "text", "button_text", "footer_text"} {
+		if _, ok := attrs[key]; !ok {
+			attrs[key] = types.StringNull()
+		}
+	}
+	typeMap := map[string]attr.Type{
+		"id":          types.StringType,
+		"org_id":      types.StringType,
+		"language":    types.StringType,
+		"title":       types.StringType,
+		"pre_header":  types.StringType,
+		"subject":     types.StringType,
+		"greeting":    types.StringType,
+		"text":        types.StringType,
+		"button_text": types.StringType,
+		"footer_text": types.StringType,
+	}
+	planWithID, diags := types.ObjectValue(typeMap, attrs)
+	resp.Diagnostics.Append(diags...)
+	resp.Diagnostics.Append(resp.State.Set(ctx, planWithID)...)
 }
 
 func (r *defaultInitMessageTextResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
@@ -230,6 +317,10 @@ func (r *defaultInitMessageTextResource) Delete(ctx context.Context, req resourc
 	}
 	language := getStateAttrsFromObject(ctx, state, resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
+		return
+	}
+	if language == "" {
+		resp.Diagnostics.AddError("Missing language attribute in state", "Cannot delete resource without a valid language value.")
 		return
 	}
 

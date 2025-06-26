@@ -34,6 +34,12 @@ type defaultPasswordChangeMessageTextResource struct {
 	clientInfo *helper.ClientInfo
 }
 
+type defaultPasswordChangeMessageTextModel struct {
+	OrgID types.String `tfsdk:"org_id"`
+	ID    types.String `tfsdk:"id"`
+	// Add other fields as needed
+}
+
 func (r *defaultPasswordChangeMessageTextResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_default_password_change_message_text"
 }
@@ -54,14 +60,22 @@ func (r *defaultPasswordChangeMessageTextResource) Schema(ctx context.Context, r
 		// This is a simplified conversion - you may need to handle specific attribute types
 		resourceAttrs[name] = convertAttribute(attr)
 	}
-	
-	// Remove org_id if it exists
-	delete(resourceAttrs, "org_id")
+
+	// Add id attribute for Terraform tracking
+	resourceAttrs["org_id"] = schema.StringAttribute{
+		Required:    true,
+		Description: "The organization ID.",
+	}
+	resourceAttrs["id"] = schema.StringAttribute{
+		Computed:    true,
+		Description: "Unique identifier for this managed resource.",
+	}
 
 	resp.Schema = schema.Schema{
-		Attributes:  resourceAttrs,
-		Description: generatedSchema.Description,
-		// Copy other schema properties as needed
+		Attributes:          resourceAttrs,
+		Description:         generatedSchema.Description,
+		MarkdownDescription: generatedSchema.MarkdownDescription,
+		DeprecationMessage:  generatedSchema.DeprecationMessage,
 	}
 }
 
@@ -70,7 +84,7 @@ func (r *defaultPasswordChangeMessageTextResource) Schema(ctx context.Context, r
 func convertAttribute(providerAttr interface{}) schema.Attribute {
 	// This is a placeholder - you'll need to implement the actual conversion
 	// based on the specific attribute types returned by text.GenSchemaMessageCustomText
-	
+
 	// For example, if it's a string attribute:
 	// if stringAttr, ok := providerAttr.(provider_schema.StringAttribute); ok {
 	//     return schema.StringAttribute{
@@ -80,7 +94,7 @@ func convertAttribute(providerAttr interface{}) schema.Attribute {
 	//         // ... other properties
 	//     }
 	// }
-	
+
 	// For now, return a basic string attribute - replace with proper conversion
 	return schema.StringAttribute{
 		Optional: true,
@@ -142,14 +156,16 @@ func (r *defaultPasswordChangeMessageTextResource) Create(ctx context.Context, r
 		return
 	}
 
-	setID(plan, language)
+	attrs := plan.Attributes()
+	attrs["id"] = attrs["org_id"]
+	plan, diags := types.ObjectValue(plan.AttributeTypes(ctx), attrs)
+	resp.Diagnostics.Append(diags...)
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
 
 func (r *defaultPasswordChangeMessageTextResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	var state types.Object
-	diags := req.State.Get(ctx, &state)
-	resp.Diagnostics.Append(diags...)
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -175,7 +191,10 @@ func (r *defaultPasswordChangeMessageTextResource) Read(ctx context.Context, req
 		return
 	}
 
-	setID(state, language)
+	attrs := state.Attributes()
+	attrs["id"] = attrs["org_id"]
+	state, diags := types.ObjectValue(state.AttributeTypes(ctx), attrs)
+	resp.Diagnostics.Append(diags...)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
@@ -226,7 +245,10 @@ func (r *defaultPasswordChangeMessageTextResource) Update(ctx context.Context, r
 		return
 	}
 
-	setID(plan, language)
+	attrs := plan.Attributes()
+	attrs["id"] = attrs["org_id"]
+	plan, diags := types.ObjectValue(plan.AttributeTypes(ctx), attrs)
+	resp.Diagnostics.Append(diags...)
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
 

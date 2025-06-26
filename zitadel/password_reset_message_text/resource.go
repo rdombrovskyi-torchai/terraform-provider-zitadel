@@ -8,11 +8,11 @@ import (
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
+	providerschema "github.com/hashicorp/terraform-plugin-framework/provider/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	providerschema "github.com/hashicorp/terraform-plugin-framework/provider/schema"
 	"github.com/zitadel/zitadel-go/v3/pkg/client/zitadel/admin"
 	textpb "github.com/zitadel/zitadel-go/v3/pkg/client/zitadel/text"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -38,7 +38,7 @@ type passwordResetMessageTextResource struct {
 }
 
 func (r *passwordResetMessageTextResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
-	resp.TypeName = req.ProviderTypeName + "_default_password_reset_message_text"
+	resp.TypeName = req.ProviderTypeName + "_password_reset_message_text"
 }
 
 func (r *passwordResetMessageTextResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
@@ -55,6 +55,13 @@ func (r *passwordResetMessageTextResource) Schema(ctx context.Context, req resou
 		if name != "org_id" { // Skip org_id attribute
 			resourceAttrs[name] = convertProviderAttrToResourceAttr(attr)
 		}
+	}
+
+	// Remove org_id if it exists
+	delete(resourceAttrs, "org_id")
+	resourceAttrs["id"] = schema.StringAttribute{
+		Computed:    true,
+		Description: "Unique identifier for this managed resource.",
 	}
 
 	resp.Schema = schema.Schema{

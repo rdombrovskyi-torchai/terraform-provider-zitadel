@@ -4,8 +4,10 @@ import (
 	"context"
 	"flag"
 	"log"
-	"github.com/hashicorp/terraform-plugin-framework/providerserver"
+
 	"github.com/hashicorp/terraform-plugin-framework/provider"
+	"github.com/hashicorp/terraform-plugin-framework/providerserver"
+
 	"github.com/zitadel/terraform-provider-zitadel/v2/zitadel"
 )
 

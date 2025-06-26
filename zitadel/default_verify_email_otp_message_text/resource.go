@@ -8,11 +8,11 @@ import (
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
+	providerschema "github.com/hashicorp/terraform-plugin-framework/provider/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	providerschema "github.com/hashicorp/terraform-plugin-framework/provider/schema"
 	"github.com/zitadel/zitadel-go/v3/pkg/client/zitadel/admin"
 	textpb "github.com/zitadel/zitadel-go/v3/pkg/client/zitadel/text"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -52,9 +52,29 @@ func (r *defaultVerifyEmailOTPMessageTextResource) Schema(ctx context.Context, r
 	// Convert provider schema to resource schema
 	resourceAttrs := make(map[string]schema.Attribute)
 	for name, attr := range providerSchema.Attributes {
-		if name != "org_id" { // Skip org_id attribute
-			resourceAttrs[name] = convertProviderAttrToResourceAttr(attr)
+		resourceAttrs[name] = convertProviderAttrToResourceAttr(attr)
+	}
+	// Ensure org_id is required
+	if orgAttr, ok := resourceAttrs["org_id"]; ok {
+		if strAttr, ok := orgAttr.(schema.StringAttribute); ok {
+			strAttr.Required = true
+			strAttr.Optional = false
+			resourceAttrs["org_id"] = strAttr
 		}
+	}
+	// Add id attribute for Terraform tracking
+	resourceAttrs["id"] = schema.StringAttribute{
+		Computed:    true,
+		Description: "Internal identifier for Terraform tracking.",
+	}
+
+	resourceAttrs["org_id"] = schema.StringAttribute{
+		Required:    true,
+		Description: "The organization ID.",
+	}
+	resourceAttrs["id"] = schema.StringAttribute{
+		Computed:    true,
+		Description: "Unique identifier for this managed resource.",
 	}
 
 	resp.Schema = schema.Schema{
@@ -78,6 +98,12 @@ func (r *defaultVerifyEmailOTPMessageTextResource) Configure(_ context.Context, 
 		return
 	}
 	r.clientInfo = clientInfo
+}
+
+type defaultVerifyEmailOtpMessageTextModel struct {
+	OrgID types.String `tfsdk:"org_id"`
+	ID    types.String `tfsdk:"id"`
+	// Add other fields as needed
 }
 
 func (r *defaultVerifyEmailOTPMessageTextResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
@@ -123,14 +149,16 @@ func (r *defaultVerifyEmailOTPMessageTextResource) Create(ctx context.Context, r
 		return
 	}
 
-	setID(&plan, language)
+	attrs := plan.Attributes()
+	attrs["id"] = attrs["org_id"]
+	plan, diags := types.ObjectValue(plan.AttributeTypes(ctx), attrs)
+	resp.Diagnostics.Append(diags...)
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
 
 func (r *defaultVerifyEmailOTPMessageTextResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	var state types.Object
-	diags := req.State.Get(ctx, &state)
-	resp.Diagnostics.Append(diags...)
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
@@ -163,7 +191,10 @@ func (r *defaultVerifyEmailOTPMessageTextResource) Read(ctx context.Context, req
 		return
 	}
 
-	setID(&state, language)
+	attrs := state.Attributes()
+	attrs["id"] = attrs["org_id"]
+	state, diags := types.ObjectValue(state.AttributeTypes(ctx), attrs)
+	resp.Diagnostics.Append(diags...)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
 }
 
@@ -210,7 +241,10 @@ func (r *defaultVerifyEmailOTPMessageTextResource) Update(ctx context.Context, r
 		return
 	}
 
-	setID(&plan, language)
+	attrs := plan.Attributes()
+	attrs["id"] = attrs["org_id"]
+	plan, diags := types.ObjectValue(plan.AttributeTypes(ctx), attrs)
+	resp.Diagnostics.Append(diags...)
 	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
 }
 
@@ -275,7 +309,7 @@ func getPlanAttrs(ctx context.Context, plan tfsdk.Plan, diags diag.Diagnostics) 
 func convertProviderAttrToResourceAttr(attr providerschema.Attribute) schema.Attribute {
 	// This is a simplified conversion - you may need to handle more attribute types
 	// based on what your generated schema actually contains
-	
+
 	switch v := attr.(type) {
 	case providerschema.StringAttribute:
 		return schema.StringAttribute{
@@ -354,11 +388,11 @@ func isResourceNotFoundError(err error) bool {
 	if err == nil {
 		return false
 	}
-	
+
 	errStr := strings.ToLower(err.Error())
-	return strings.Contains(errStr, "not found") || 
-		   strings.Contains(errStr, "not_found") ||
-		   strings.Contains(errStr, "does not exist")
+	return strings.Contains(errStr, "not found") ||
+		strings.Contains(errStr, "not_found") ||
+		strings.Contains(errStr, "does not exist")
 }
 
 // Fixed function to get language from types.Object instead of tfsdk.State
@@ -366,17 +400,17 @@ func getStateAttrsFromObject(ctx context.Context, obj types.Object, diags diag.D
 	if obj.IsNull() || obj.IsUnknown() {
 		return ""
 	}
-	
+
 	attrs := obj.Attributes()
 	if attrs == nil {
 		return ""
 	}
-	
+
 	if langAttr, exists := attrs[LanguageVar]; exists {
 		if langStr, ok := langAttr.(types.String); ok && !langStr.IsNull() && !langStr.IsUnknown() {
 			return langStr.ValueString()
 		}
 	}
-	
+
 	return ""
 }

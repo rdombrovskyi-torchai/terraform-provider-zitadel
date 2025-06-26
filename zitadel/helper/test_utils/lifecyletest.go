@@ -7,7 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/terraform"
 )
 
 func RunLifecyleTest[P comparable](
@@ -30,8 +31,7 @@ func RunLifecyleTest[P comparable](
 		{ // Check first plan has a diff
 			Config:             exampleConfig,
 			ExpectNonEmptyPlan: true,
-			// ExpectNonEmptyPlan just works with PlanOnly set to true
-			PlanOnly: true,
+			PlanOnly:           true,
 		}, { // Check resource is created
 			Config: exampleConfig,
 			Check: resource.ComposeAggregateTestCheckFunc(
@@ -41,8 +41,7 @@ func RunLifecyleTest[P comparable](
 		}, { // Check updating name has a diff
 			Config:             updatedPropertyConfig,
 			ExpectNonEmptyPlan: true,
-			// ExpectNonEmptyPlan just works with PlanOnly set to true
-			PlanOnly: true,
+			PlanOnly:           true,
 		}, { // Check remote state can be updated
 			Config: updatedPropertyConfig,
 			Check:  CheckAMinute(checkRemoteProperty(updatedProperty)),
@@ -63,8 +62,7 @@ func RunLifecyleTest[P comparable](
 		steps = append(steps, resource.TestStep{ // Check that secret has a diff
 			Config:             updatedSecretConfig,
 			ExpectNonEmptyPlan: true,
-			// ExpectNonEmptyPlan just works with PlanOnly set to true
-			PlanOnly: true,
+			PlanOnly:           true,
 		}, resource.TestStep{ // Check secret can be updated
 			Config: updatedSecretConfig,
 		})

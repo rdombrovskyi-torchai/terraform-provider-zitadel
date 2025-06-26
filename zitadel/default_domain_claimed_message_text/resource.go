@@ -6,13 +6,14 @@ import (
 	"strings"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
+	providerschema "github.com/hashicorp/terraform-plugin-framework/provider/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-framework/types"
-	providerschema "github.com/hashicorp/terraform-plugin-framework/provider/schema"
 	"github.com/zitadel/zitadel-go/v3/pkg/client/zitadel/admin"
 	textpb "github.com/zitadel/zitadel-go/v3/pkg/client/zitadel/text"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -53,7 +54,17 @@ func (r *defaultDomainClaimedMessageTextResource) Schema(ctx context.Context, re
 	resourceAttrs := make(map[string]schema.Attribute)
 	for name, attr := range providerSchema.Attributes {
 		if name != "org_id" { // Skip org_id attribute
-			resourceAttrs[name] = convertProviderAttrToResourceAttr(attr)
+			resourceAttr := convertProviderAttrToResourceAttr(attr)
+			// Ensure 'id' is marked as Computed
+			if name == "id" {
+				if strAttr, ok := resourceAttr.(schema.StringAttribute); ok {
+					strAttr.Computed = true
+					strAttr.Required = false
+					strAttr.Optional = false
+					resourceAttr = strAttr
+				}
+			}
+			resourceAttrs[name] = resourceAttr
 		}
 	}
 
@@ -128,7 +139,28 @@ func (r *defaultDomainClaimedMessageTextResource) Create(ctx context.Context, re
 	}
 
 	setID(&plan, language)
-	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
+	attrs := plan.Attributes()
+	typeMap := map[string]attr.Type{
+		"id":          types.StringType,
+		"language":    types.StringType,
+		"title":       types.StringType,
+		"pre_header":  types.StringType,
+		"subject":     types.StringType,
+		"greeting":    types.StringType,
+		"text":        types.StringType,
+		"button_text": types.StringType,
+		"footer_text": types.StringType,
+	}
+	delete(attrs, "org_id")
+	attrs["id"] = types.StringValue(language)
+	for key := range typeMap {
+		if _, ok := attrs[key]; !ok {
+			attrs[key] = types.StringNull()
+		}
+	}
+	planWithID, diags := types.ObjectValue(typeMap, attrs)
+	resp.Diagnostics.Append(diags...)
+	resp.Diagnostics.Append(resp.State.Set(ctx, planWithID)...)
 }
 
 func (r *defaultDomainClaimedMessageTextResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
@@ -168,7 +200,29 @@ func (r *defaultDomainClaimedMessageTextResource) Read(ctx context.Context, req 
 	}
 
 	setID(&state, language)
-	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
+	attrs := state.Attributes()
+	attrs["id"] = types.StringValue(language)
+	attrs["language"] = types.StringValue(language)
+	typeMap := map[string]attr.Type{
+		"id":          types.StringType,
+		"language":    types.StringType,
+		"title":       types.StringType,
+		"pre_header":  types.StringType,
+		"subject":     types.StringType,
+		"greeting":    types.StringType,
+		"text":        types.StringType,
+		"button_text": types.StringType,
+		"footer_text": types.StringType,
+	}
+	delete(attrs, "org_id")
+	for key := range typeMap {
+		if _, ok := attrs[key]; !ok {
+			attrs[key] = types.StringNull()
+		}
+	}
+	stateWithID, diags := types.ObjectValue(typeMap, attrs)
+	resp.Diagnostics.Append(diags...)
+	resp.Diagnostics.Append(resp.State.Set(ctx, stateWithID)...)
 }
 
 func (r *defaultDomainClaimedMessageTextResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
@@ -219,7 +273,28 @@ func (r *defaultDomainClaimedMessageTextResource) Update(ctx context.Context, re
 	}
 
 	setID(&plan, language)
-	resp.Diagnostics.Append(resp.State.Set(ctx, plan)...)
+	attrs := plan.Attributes()
+	typeMap := map[string]attr.Type{
+		"id":          types.StringType,
+		"language":    types.StringType,
+		"title":       types.StringType,
+		"pre_header":  types.StringType,
+		"subject":     types.StringType,
+		"greeting":    types.StringType,
+		"text":        types.StringType,
+		"button_text": types.StringType,
+		"footer_text": types.StringType,
+	}
+	delete(attrs, "org_id")
+	attrs["id"] = types.StringValue(language)
+	for key := range typeMap {
+		if _, ok := attrs[key]; !ok {
+			attrs[key] = types.StringNull()
+		}
+	}
+	planWithID, diags := types.ObjectValue(typeMap, attrs)
+	resp.Diagnostics.Append(diags...)
+	resp.Diagnostics.Append(resp.State.Set(ctx, planWithID)...)
 }
 
 func (r *defaultDomainClaimedMessageTextResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
@@ -231,6 +306,10 @@ func (r *defaultDomainClaimedMessageTextResource) Delete(ctx context.Context, re
 	}
 	language := getStateAttrsFromObject(ctx, state, resp.Diagnostics)
 	if resp.Diagnostics.HasError() {
+		return
+	}
+	if language == "" {
+		resp.Diagnostics.AddError("Missing language attribute in state", "Cannot delete resource without a valid language value.")
 		return
 	}
 
@@ -283,7 +362,7 @@ func getPlanAttrs(ctx context.Context, plan tfsdk.Plan, diags diag.Diagnostics) 
 func convertProviderAttrToResourceAttr(attr providerschema.Attribute) schema.Attribute {
 	// This is a simplified conversion - you may need to handle more attribute types
 	// based on what your generated schema actually contains
-	
+
 	switch v := attr.(type) {
 	case providerschema.StringAttribute:
 		return schema.StringAttribute{
@@ -362,11 +441,11 @@ func isResourceNotFoundError(err error) bool {
 	if err == nil {
 		return false
 	}
-	
+
 	errStr := strings.ToLower(err.Error())
-	return strings.Contains(errStr, "not found") || 
-		   strings.Contains(errStr, "not_found") ||
-		   strings.Contains(errStr, "does not exist")
+	return strings.Contains(errStr, "not found") ||
+		strings.Contains(errStr, "not_found") ||
+		strings.Contains(errStr, "does not exist")
 }
 
 // Fixed function to get language from types.Object instead of resource.State
@@ -374,17 +453,17 @@ func getStateAttrsFromObject(ctx context.Context, obj types.Object, diags diag.D
 	if obj.IsNull() || obj.IsUnknown() {
 		return ""
 	}
-	
+
 	attrs := obj.Attributes()
 	if attrs == nil {
 		return ""
 	}
-	
+
 	if langAttr, exists := attrs[LanguageVar]; exists {
 		if langStr, ok := langAttr.(types.String); ok && !langStr.IsNull() && !langStr.IsUnknown() {
 			return langStr.ValueString()
 		}
 	}
-	
+
 	return ""
 }
